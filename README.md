@@ -16,7 +16,8 @@ language, Mermaid + LaTeX + table rendering, image generation, per-chat params
 (temperature, penalties, context window, stream toggle), token/cost estimates
 + usage dashboard, secret share links (revocable, manageable), JSON/Markdown/
 HTML export + import (incl. ChatGPT/Claude exports), text-to-speech (browser,
-Edge neural, or ElevenLabs), voice input, drafts, artifacts preview, a
+Edge neural, or ElevenLabs), voice input, drafts, **artifacts (docked editor
+with version history and AI rewrite, shareable)**, a
 sanitized (DOMPurify) accessible UI with dark/light/system themes and
 rebindable shortcuts, optional app password, opt-in offline cache.
 
@@ -56,9 +57,9 @@ Open http://127.0.0.1:8000. Then:
 Verify everything end-to-end without any provider account:
 
 ```bash
-uv run pytest tests/ -q                                  # 86 tests
+uv run pytest tests/ -q                                  # 97 tests
 uv run scripts/demo.py                                   # app + mock provider, streams a chat
-uv run --with playwright python scripts/browser_check.py # 62 UI checks in headless Chrome
+uv run --with playwright python scripts/browser_check.py # 71 UI checks in headless Chrome
 ```
 
 The browser pass drives the real SPA (stream, stop, regenerate, edit & re-run,
@@ -183,8 +184,8 @@ provider keys to survive a restore.
 
 ## Status
 
-See `docs/parity.md` for the feature parity table. Verified by 86 pytest
-endpoint tests, the SSE demo, and a 62-check automated browser pass
+See `docs/parity.md` for the feature parity table. Verified by 97 pytest
+endpoint tests, the SSE demo, and a 71-check automated browser pass
 (`scripts/browser_check.py`). Still recommended before real use: one manual
 look on a phone (responsive layout is CSS-only) and a live-provider smoke
 test with a real key (open items in parity.md → UNRESOLVED).

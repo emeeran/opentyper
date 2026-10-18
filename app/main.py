@@ -52,7 +52,7 @@ app.include_router(router)
 # page, the manifest and icon are public: the shell holds no data (everything
 # sensitive arrives via /api), share tokens are their own capability, and a
 # locked-out browser must still receive app.js to render the sign-in modal.
-PUBLIC_PREFIXES = ("/s/", "/api/public/")
+PUBLIC_PREFIXES = ("/s/", "/pa/", "/api/public/")
 PUBLIC_PATHS = ("/api/health", "/api/auth/login")
 
 
@@ -89,6 +89,50 @@ def share_page(token: str):
         "DOMPurify.sanitize(marked.parse(m.content||''));"
         "c.append(el);}})"
         ".catch(()=>{document.getElementById('c').textContent='Share not found.'});"
+        "</script>")
+
+
+@app.get("/pa/{token}")
+def artifact_share_page(token: str):
+    """Public read-only view of a shared artifact. The token is the secret.
+    html/svg render in a sandboxed iframe (originless); markdown goes through
+    DOMPurify; code is text only — artifact content never touches this page's
+    DOM as raw HTML."""
+    from html import escape
+    return HTMLResponse(
+        "<!doctype html><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<title>Shared artifact</title><link rel='stylesheet' href='/style.css'>"
+        "<style>body{max-width:52rem;margin:0 auto;padding:1rem 1rem 3rem}"
+        "h1{font-size:1.4rem}.meta{font-size:.75rem;color:#64748b;margin:.2rem 0 .8rem}"
+        "#v{border-radius:10px;overflow:hidden}"
+        "iframe{width:100%;height:70vh;border:1px solid #d9dbe0;background:#fff}"
+        "pre{white-space:pre-wrap;overflow-wrap:break-word;border:1px solid #d9dbe0;"
+        "border-radius:10px;padding:.8rem;font-size:13px}"
+        ".md{border:1px solid #d9dbe0;border-radius:10px;padding:.8rem;"
+        "overflow-wrap:break-word}"
+        "@media (prefers-color-scheme:dark){body{background:#16181d;color:#e8eaee}"
+        "h1{color:#e8eaee}iframe{border-color:#31363f}pre{border-color:#31363f}"
+        ".md{border-color:#31363f}.meta{color:#8b93a1}}"
+        "</style>"
+        "<h1 id='t'>Shared artifact</h1><div class='meta' id='m'></div><div id='v'>"
+        "Loading…</div>"
+        "<script src='/vendor/marked.min.js'></script>"
+        "<script src='/vendor/dompurify.min.js'></script>"
+        "<script>const t=" + escape(json.dumps(token)) + ";"
+        "fetch('/api/public/artifact/'+t).then(r=>{if(!r.ok)throw 0;return r.json()})"
+        ".then(d=>{document.title=d.title;document.getElementById('t').textContent=d.title;"
+        "document.getElementById('m').textContent=d.kind+(d.language?' · '+d.language:'')"
+        "+' · v'+d.version;"
+        "const v=document.getElementById('v');v.textContent='';"
+        "if(d.kind==='html'||d.kind==='svg'){"
+        "const f=document.createElement('iframe');f.sandbox='allow-scripts';"
+        "f.title=d.title;f.srcdoc=d.content;v.append(f);}"
+        "else if(d.kind==='markdown'){"
+        "const el=document.createElement('div');el.className='md';"
+        "el.innerHTML=DOMPurify.sanitize(marked.parse(d.content||''));v.append(el);}"
+        "else{const p=document.createElement('pre');p.textContent=d.content;v.append(p);}})"
+        ".catch(()=>{document.getElementById('v').textContent='Share not found.'});"
         "</script>")
 
 

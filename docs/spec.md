@@ -272,3 +272,37 @@ temporary chats; DOMPurify sanitizes every markdown render path (app + share
 page); provider errors remain key-scrubbed. Frontend is now native ES modules
 under `static/js/` (no build step); vendored additions: DOMPurify, Mermaid +
 KaTeX (lazy), pdf.js (lazy), light highlight theme.
+
+## Appendix — Artifacts v2 (F-33, added 2026-10-18)
+
+Versioned html/svg/markdown/code documents attached to a chat, edited in a
+docked side panel (`static/js/artifacts.js` + `#artifacts` aside). Every save
+and every AI rewrite inserts a new row sharing a `root_id`; nothing is ever
+overwritten in place.
+
+Schema: `artifacts (id, root_id, chat_id → chats CASCADE, message_id →
+messages SET NULL, title, kind CHECK html|svg|markdown|code, language, content,
+version, created_at, UNIQUE(root_id, version))` — the UNIQUE constraint is what
+makes concurrent saves safe (loser retries, third collision → 409). Also
+`artifact_shares (token PK, root_id UNIQUE, created_at)` — no FK possible
+(root_id is not a key), so chat/artifact deletion removes matching share rows
+explicitly.
+
+Endpoints: `POST/GET /chats/{id}/artifacts` (create v1; latest-per-root list
+with a `versions` count), `GET /artifacts/{id}`, `GET /artifacts/{id}/versions`
+(meta only), `PUT /artifacts/{id}` (new version), `DELETE /artifacts/{id}`
+(whole chain), `POST /artifacts/{id}/rewrite` (non-stream `complete_safe`,
+finalize-style; result saved as a new version), `POST/DELETE
+/artifacts/{id}/share`, and the unauthenticated `GET
+/api/public/artifact/{token}` behind the public `/pa/{token}` page.
+
+Settings keys added: `artifact_rewrite_prompt` (editable internal rewrite
+policy; instruction chips/custom text refine it, they do not replace it).
+
+Security notes: artifact content reaches the DOM only via the originless
+sandboxed iframe (`allow-scripts`, never `allow-same-origin`), the DOMPurify
+markdown path, or `textContent`; the public page follows the same three
+paths. Share tokens are capabilities (revocable); temporary chats' artifacts
+cannot be shared and die with the chat. Rewrite is text-editing only by
+policy — no code execution. Out of scope for this pass: artifacts in
+export/import, per-rewrite usage rows.

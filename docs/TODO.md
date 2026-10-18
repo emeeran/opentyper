@@ -1,8 +1,8 @@
 # OpenTyper — Implementation TODO
 
 Executed 2026-10-18 against `improve_plan.md` (this directory). Verification: `uv run pytest
-tests/ -q` → **86 passed** · `uv run --with playwright python
-scripts/browser_check.py` → **62/62** · `uv run ruff check .` clean.
+tests/ -q` → **97 passed** · `uv run --with playwright python
+scripts/browser_check.py` → **71/71** · `uv run ruff check .` clean.
 `docs/parity.md` + `docs/spec.md` updated in the same change.
 
 Effort: S ≤½d · M 1–3d · L 3–10d · XL >10d
@@ -58,7 +58,7 @@ Effort: S ≤½d · M 1–3d · L 3–10d · XL >10d
 
 ## Phase 3 — Differentiators
 
-- [ ] **F-33 (L)** Artifacts v2 (side-panel editor + versions + AI rewrite) — not started; biggest remaining UX gap
+- [x] **F-33 (L)** Artifacts v2: docked side-panel editor (Preview sandboxed iframe / Code / Versions), per-chat list, server-side version chain, AI rewrite (chips + custom instruction, editable prompt), `/pa/` share page; code-block "Artifact" entry; pytest + browser checks
 - [x] **F-34 (M)** Agent Skills: SKILL.md/.zip import (base64, no multipart dep), agent attach UI, prompt inlining — instructions only, never executed
 - [x] **F-35 (M–L)** Vector RAG: chunk + embed via any OpenAI-compatible `/embeddings`, SQLite-stored vectors, cosine top-k merged with FTS, clean FTS-only degradation; pytest incl. provider-failure degradation
 - [x] **F-36 (M)** Image generation: OpenAI-compatible images + Gemini image models → uploads → chat message; pytest with mock
@@ -69,8 +69,8 @@ Effort: S ≤½d · M 1–3d · L 3–10d · XL >10d
 
 ## Standing gates
 
-- [x] `uv run pytest tests/ -q` green — 86 passed (baseline 53)
-- [x] `scripts/browser_check.py` green — 62/62 (baseline 46); no page errors
+- [x] `uv run pytest tests/ -q` green — 97 passed (baseline 53)
+- [x] `scripts/browser_check.py` green — 71/71 (baseline 46); no page errors
 - [ ] Perf budget (60fps @ 500-message chat, <16 ms p95 stream frames) — not benchmarked in this environment; architecture is in place (throttled stream render, append-only DOM, render cap)
 - [ ] No >100 KB script before first interaction — not an automated check; mermaid/katex/pdf are dynamic imports so they cannot load eagerly
 - [x] No new secrets/logs of keys; share pages exclude memories/documents; temporary chats excluded from lists/search/export/shares

@@ -72,7 +72,12 @@ class MockProvider:
                        if m["role"] == "user" and isinstance(m["content"], str)), "")
         await send({"type": "http.response.start", "status": 200,
                     "headers": [(b"content-type", b"text/event-stream")]})
-        if "artifact" in prompt:
+        sys_text = " ".join(m.get("content", "") for m in data["messages"]
+                            if isinstance(m.get("content", None), str)
+                            and m["role"] == "system")
+        if "rewriting an existing artifact" in sys_text:
+            reply = "```html\n<p>Artifact v3 rewritten</p>\n```"  # fenced: server unwraps
+        elif "artifact" in prompt:
             reply = ("Here you go:\n\n```html\n<button onclick=\"document.body"
                      ".style.background='gold'\">gold</button>\n```\n")
         else:
@@ -279,13 +284,64 @@ def main() -> int:
         ok("assistant edit saved in place",
             "Manually corrected" in page.inner_text(".msg.assistant .body"))
 
-        # --- artifact preview ---
+        # --- artifact preview + Artifacts v2 panel ---
         send_and_wait("give me an artifact demo")
         page.locator("button.preview").first.click()
         page.wait_for_selector("#artifact")
         ok("artifact iframe preview opens",
             "button" in (page.get_attribute("#artifact", "srcdoc") or ""))
         page.keyboard.press("Escape")
+        settle()
+
+        def _ver():
+            return page.inner_text("#ar-ver").strip()
+
+        page.locator("button.artifact").first.click()
+        page.wait_for_selector("#artifacts:not([hidden])", timeout=5000)
+        ok("artifact editor panel opens",
+            page.is_visible("#ar-frame") or page.is_visible("#ar-md"))
+        ok("artifact preview iframe is sandboxed",
+            page.get_attribute("#ar-frame", "sandbox") == "allow-scripts")
+        page.click("#ar-tab-code")
+        page.fill("#ar-code", "<p>hand edit v2</p>")
+        page.click("#ar-save")
+        page.wait_for_function(
+            "document.getElementById('ar-ver').textContent.indexOf('2/') >= 0",
+            timeout=8000)
+        ok("artifact save creates version 2", _ver() == "2/2")
+        page.fill("#ar-instruction", "make it blue")
+        page.click("#ar-rewrite")
+        page.wait_for_function(
+            "document.getElementById('ar-ver').textContent.indexOf('3/3') >= 0",
+            timeout=25000)
+        ok("artifact AI rewrite creates version 3", _ver() == "3/3")
+        page.click("#ar-prev")
+        settle(300)
+        ok("artifact version switcher navigates", _ver() == "2/3")
+        page.click("#ar-close")
+        settle()
+        page.click("#btn-artifacts")
+        page.wait_for_function(
+            "document.querySelectorAll('#ar-list .ar-item').length > 0 "
+            "|| !document.getElementById('ar-empty').hidden", timeout=5000)
+        ok("artifact list view shows the chat's artifact",
+            page.locator("#ar-list .ar-item").count() == 1)
+        page.click("#ar-close")
+        settle()
+        art = httpx.post(f"{base}/api/chats", json={"model": "gpt-4o",
+                                                    "provider_id": "openai"},
+                         timeout=10).json()
+        row = httpx.post(f"{base}/api/chats/{art['id']}/artifacts",
+                         json={"content": "<h1>public page</h1>", "kind": "html"},
+                         timeout=10).json()
+        pa = httpx.post(f"{base}/api/artifacts/{row['id']}/share", timeout=10).json()
+        page_anon = httpx.get(f"{base}{pa['url']}", timeout=10)
+        ok("artifact public page renders",
+            page_anon.status_code == 200 and "Shared artifact" in page_anon.text)
+        tok = pa["url"].rsplit("/", 1)[-1]
+        ok("artifact public data serves latest version",
+            httpx.get(f"{base}/api/public/artifact/{tok}",
+                      timeout=10).json()["version"] == 1)
 
         # --- TTS bar + mic (route-stubbed with valid MP3; no live synthesis) ---
         tts_hits: list[str] = []
@@ -593,7 +649,8 @@ def main() -> int:
         # --- static assets + PWA ---
         for path in ["/manifest.webmanifest", "/icon.svg", "/vendor/marked.min.js",
                      "/vendor/highlight.min.js", "/vendor/dompurify.min.js",
-                     "/vendor/highlight-github-dark.min.css", "/js/main.js", "/sw.js"]:
+                     "/vendor/highlight-github-dark.min.css", "/js/main.js",
+                     "/js/artifacts.js", "/sw.js"]:
             ok(f"asset {path}", c.get(path).status_code == 200)
 
         browser.close()

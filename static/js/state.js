@@ -13,6 +13,9 @@ export const state = {
   tempChat: false,           // next/new chat is temporary
   useKnowledge: false,       // send-time knowledge override
   sideChat: { open: false, controller: null, context: "" },
+  artifacts: { open: false, currentId: null, rootId: null, chatId: null,
+               versions: [], index: 0, content: "", row: null,
+               controller: null, listChatId: null },
   shortcuts: {},             // action -> combo string (rebinding)
   lastHit: null,             // search hit to scroll to
 };

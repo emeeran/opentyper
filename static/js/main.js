@@ -11,6 +11,7 @@ import { toast } from "./toast.js";
 import { closeModal, openModal, fillTemplate, confirmDialog } from "./modal.js";
 import { applyTheme, applyWide } from "./theme.js";
 import { wireTtsBar } from "./tts.js";
+import { wireArtifacts, closeArtifacts } from "./artifacts.js";
 import * as chat from "./chat.js";
 import { wireSidebar, renderSidebar } from "./sidebar.js";
 import { showAuthModal, wireAuth } from "./modals/auth.js";
@@ -230,6 +231,7 @@ function wireEvents() {
       $("#prompt-menu").hidden = true;
       $("#params-pop").hidden = true;
       chat.closeSideChat();
+      if (!$("#artifacts").hidden) closeArtifacts();
     } else if (e.key === "/" && !inField && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       $("#input").focus();
@@ -336,6 +338,7 @@ async function wireServiceWorker() {
     '<div class="skeleton"><i></i><i></i><i></i></div>';
   wireEvents();
   wireTtsBar();
+  wireArtifacts();
   wireSidebar(refreshAll, chat.openChat.bind(chat), chat.renderEmpty);
   wireAuth(refreshAll);
   chat.setRefreshAll(refreshAll);

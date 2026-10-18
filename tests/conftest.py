@@ -69,6 +69,9 @@ class MockProvider:
                                if isinstance(m.get("content"), str))
         if "extract durable facts" in system_text:
             reply = '["Prefers concise answers with code"]'
+        elif "rewriting an existing artifact" in system_text:
+            # deliberately fenced: proves the server unwraps single-fence replies
+            reply = "```html\n<p>REWRITTEN ARTIFACT BODY</p>\n```"
         elif data.get("stream"):
             await send({"type": "http.response.start", "status": 200,
                         "headers": [(b"content-type", b"text/event-stream")]})

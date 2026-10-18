@@ -21,13 +21,15 @@ from . import crypto, db, providers, tts, vectors
 
 router = APIRouter(prefix="/api")
 
-REV = 3  # bumped per release; the service worker keys its cache on this
+REV = 4  # bumped per release; the service worker keys its cache on this
 
 _bg_tasks: set[asyncio.Task] = set()
 
 IMAGE_MIMES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
                "image/gif": "gif"}
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_ARTIFACT_CHARS = 200_000        # artifact content cap (create + save)
+MAX_ARTIFACT_REWRITE_CHARS = 40_000  # content cap fed to the model for a rewrite
 
 
 def now() -> str:
@@ -772,6 +774,9 @@ def delete_chat(chat_id: str):
     try:
         if not con.execute("SELECT 1 FROM chats WHERE id=?", (chat_id,)).fetchone():
             raise HTTPException(404, "chat not found")
+        # artifact rows cascade via FK; share tokens can't (root_id is not a key)
+        con.execute("DELETE FROM artifact_shares WHERE root_id IN "
+                    "(SELECT root_id FROM artifacts WHERE chat_id=?)", (chat_id,))
         con.execute("DELETE FROM chats WHERE id=?", (chat_id,))
         con.commit()
         return {"ok": True}
@@ -1143,6 +1148,16 @@ _DEFAULT_MEMORY_PROMPT = (
     '["Prefers concise answers with code first","Is building a FastAPI app"]. '
     "Reply with [] if there is nothing durable.")
 
+_DEFAULT_ARTIFACT_REWRITE_PROMPT = (
+    "You are rewriting an existing artifact (an HTML page, SVG image, Markdown "
+    "document or source-code file) for the user. Apply the requested change "
+    "faithfully and return the COMPLETE rewritten artifact. This is text "
+    "editing only: never execute code, never call tools, never fetch network "
+    "resources, and never add anything that would run outside this document. "
+    "Preserve the artifact's format and language unless asked to change it, and "
+    "keep unrelated parts byte-identical where possible. Output ONLY the "
+    "artifact body — no preamble, no commentary, no surrounding code fences.")
+
 
 def _extract_json_array(text: str) -> str:
     """Pull the first JSON array out of a model reply."""
@@ -1151,6 +1166,13 @@ def _extract_json_array(text: str) -> str:
     if start < 0 or end <= start:
         return "[]"
     return text[start:end + 1]
+
+
+def _strip_fence(text: str) -> str:
+    """Models often wrap artifact rewrites in ``` fences; unwrap when the whole
+    reply is exactly one fenced block, else return the text trimmed."""
+    m = re.fullmatch(r"\s*```[\w.+-]*\r?\n(.*?)\r?\n?```\s*", text or "", re.DOTALL)
+    return m.group(1) if m else (text or "").strip()
 
 
 @router.post("/chats/{chat_id}/messages")
@@ -1449,6 +1471,7 @@ class SettingsIn(BaseModel):
     memory_enabled: bool | None = None
     memory_extract_prompt: str | None = Field(None, max_length=4000)
     finalize_prompt: str | None = Field(None, max_length=4000)
+    artifact_rewrite_prompt: str | None = Field(None, max_length=4000)
     service_worker: bool | None = None
     embedding_provider_id: str | None = None
     embedding_model: str | None = Field(None, max_length=200)
@@ -1468,6 +1491,7 @@ def get_settings():
                 "memory_enabled": get_setting(con, "memory_enabled", "0") == "1",
                 "memory_extract_prompt": get_setting(con, "memory_extract_prompt"),
                 "finalize_prompt": get_setting(con, "finalize_prompt"),
+                "artifact_rewrite_prompt": get_setting(con, "artifact_rewrite_prompt"),
                 "service_worker": get_setting(con, "service_worker", "0") == "1",
                 "embedding_provider_id": emb_provider,
                 "embedding_model": get_setting(con, "embedding_model"),
@@ -1495,6 +1519,7 @@ def put_settings(body: SettingsIn):
                             else ("1" if body.memory_enabled else "0")),
                            ("memory_extract_prompt", body.memory_extract_prompt),
                            ("finalize_prompt", body.finalize_prompt),
+                           ("artifact_rewrite_prompt", body.artifact_rewrite_prompt),
                            ("service_worker", None if body.service_worker is None
                             else ("1" if body.service_worker else "0")),
                            ("embedding_provider_id", body.embedding_provider_id),
@@ -2158,6 +2183,269 @@ def get_agent_skills(agent_id: str):
     try:
         return [r["skill_id"] for r in con.execute(
             "SELECT skill_id FROM agents_skills_link WHERE agent_id=?", (agent_id,))]
+    finally:
+        con.close()
+
+
+# --- artifacts (versioned html/svg/markdown/code documents per chat) ------------
+
+class ArtifactIn(BaseModel):
+    content: str = Field(min_length=1, max_length=MAX_ARTIFACT_CHARS)
+    title: str | None = Field(None, max_length=200)
+    kind: str | None = Field(None, pattern="^(html|svg|markdown|code)$")
+    language: str | None = Field(None, max_length=40)
+    message_id: str | None = None
+
+
+class ArtifactSaveIn(BaseModel):
+    content: str = Field(min_length=1, max_length=MAX_ARTIFACT_CHARS)
+    title: str | None = Field(None, max_length=200)
+
+
+class ArtifactRewriteIn(BaseModel):
+    instruction: str | None = Field(None, max_length=4000)
+    provider_id: str | None = None
+    model: str | None = Field(None, max_length=200)
+
+
+def _artifact_title(content: str, kind: str, title: str | None) -> str:
+    if title and title.strip():
+        return title.strip()[:200]
+    for line in content.splitlines():
+        if line.strip():
+            return line.strip()[:80]
+    return f"{kind} artifact"
+
+
+def _load_artifact(con: sqlite3.Connection, artifact_id: str) -> sqlite3.Row:
+    row = con.execute("SELECT * FROM artifacts WHERE id=?",
+                      (artifact_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "artifact not found")
+    return row
+
+
+def _insert_artifact_version(con: sqlite3.Connection, prev: sqlite3.Row,
+                             content: str, title: str | None) -> dict:
+    """Save content as the next version of prev's chain. UNIQUE(root_id, version)
+    makes concurrent saves safe: the loser retries with the fresh max; a third
+    collision surfaces as 409 instead of lost or duplicated versions."""
+    title = (title or prev["title"])[:200]
+    for _ in range(3):
+        try:
+            v = con.execute("SELECT COALESCE(MAX(version), 0) + 1 FROM artifacts "
+                            "WHERE root_id=?", (prev["root_id"],)).fetchone()[0]
+            aid = new_id()
+            con.execute(
+                "INSERT INTO artifacts (id, root_id, chat_id, message_id, title, "
+                "kind, language, content, version, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (aid, prev["root_id"], prev["chat_id"], prev["message_id"], title,
+                 prev["kind"], prev["language"], content, v, now()))
+            con.commit()
+            return dict(con.execute("SELECT * FROM artifacts WHERE id=?",
+                                    (aid,)).fetchone())
+        except sqlite3.IntegrityError:
+            con.rollback()
+    raise HTTPException(409, "artifact is being edited — try again")
+
+
+@router.post("/chats/{chat_id}/artifacts")
+def create_artifact(chat_id: str, body: ArtifactIn):
+    con = db.connect()
+    try:
+        if not con.execute("SELECT 1 FROM chats WHERE id=?", (chat_id,)).fetchone():
+            raise HTTPException(404, "chat not found")
+        if body.message_id and not con.execute(
+                "SELECT 1 FROM messages WHERE id=? AND chat_id=?",
+                (body.message_id, chat_id)).fetchone():
+            raise HTTPException(404, "message not found")
+        kind = body.kind or "code"
+        aid = new_id()
+        con.execute(
+            "INSERT INTO artifacts (id, root_id, chat_id, message_id, title, "
+            "kind, language, content, version, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (aid, aid, chat_id, body.message_id,
+             _artifact_title(body.content, kind, body.title), kind,
+             (body.language or "").lower() or None, body.content, 1, now()))
+        con.commit()
+        return dict(con.execute("SELECT * FROM artifacts WHERE id=?", (aid,)).fetchone())
+    finally:
+        con.close()
+
+
+@router.get("/chats/{chat_id}/artifacts")
+def list_artifacts(chat_id: str):
+    con = db.connect()
+    try:
+        if not con.execute("SELECT 1 FROM chats WHERE id=?", (chat_id,)).fetchone():
+            raise HTTPException(404, "chat not found")
+        # exactly one max() aggregate → SQLite takes the bare columns from the
+        # row that produced it (sqlite.org/lang_select.html#bareagg)
+        rows = con.execute(
+            "SELECT a.id, a.root_id, a.chat_id, a.message_id, a.title, a.kind, "
+            "a.language, a.content, MAX(a.version) AS version, a.created_at, "
+            "(SELECT COUNT(*) FROM artifacts c WHERE c.root_id = a.root_id) "
+            "  AS versions "
+            "FROM artifacts a WHERE a.chat_id=? GROUP BY a.root_id "
+            "ORDER BY a.created_at DESC", (chat_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+@router.get("/artifacts/{artifact_id}")
+def get_artifact(artifact_id: str):
+    con = db.connect()
+    try:
+        return dict(_load_artifact(con, artifact_id))
+    finally:
+        con.close()
+
+
+@router.get("/artifacts/{artifact_id}/versions")
+def artifact_versions(artifact_id: str):
+    con = db.connect()
+    try:
+        row = _load_artifact(con, artifact_id)
+        return [dict(r) for r in con.execute(
+            "SELECT id, version, title, kind, language, LENGTH(content) AS size, "
+            "created_at FROM artifacts WHERE root_id=? ORDER BY version",
+            (row["root_id"],))]
+    finally:
+        con.close()
+
+
+@router.put("/artifacts/{artifact_id}")
+def save_artifact(artifact_id: str, body: ArtifactSaveIn):
+    """Saving always creates a new version — history is never rewritten."""
+    con = db.connect()
+    try:
+        row = _load_artifact(con, artifact_id)
+        return _insert_artifact_version(con, row, body.content, body.title)
+    finally:
+        con.close()
+
+
+@router.delete("/artifacts/{artifact_id}")
+def delete_artifact(artifact_id: str):
+    con = db.connect()
+    try:
+        row = _load_artifact(con, artifact_id)
+        n = con.execute("SELECT COUNT(*) FROM artifacts WHERE root_id=?",
+                        (row["root_id"],)).fetchone()[0]
+        con.execute("DELETE FROM artifacts WHERE root_id=?", (row["root_id"],))
+        con.execute("DELETE FROM artifact_shares WHERE root_id=?", (row["root_id"],))
+        con.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        con.close()
+
+
+@router.post("/artifacts/{artifact_id}/rewrite")
+async def rewrite_artifact(artifact_id: str, body: ArtifactRewriteIn):
+    """One-shot AI rewrite via the artifact's chat model; the result lands as a
+    new version (never clobbers). Non-streaming, like finalize."""
+    con = db.connect()
+    try:
+        row = _load_artifact(con, artifact_id)
+        if len(row["content"]) > MAX_ARTIFACT_REWRITE_CHARS:
+            raise HTTPException(400, f"artifact too large to rewrite "
+                                     f"(max {MAX_ARTIFACT_REWRITE_CHARS} chars)")
+        chat = con.execute("SELECT * FROM chats WHERE id=?",
+                           (row["chat_id"],)).fetchone()
+        if not chat:
+            raise HTTPException(404, "chat not found")
+        provider = load_provider(con, body.provider_id or chat["provider_id"])
+        api_key = api_key_for(con, provider["id"])
+        model = body.model or chat["model"]
+        price = price_for(con, model)
+        policy = (get_setting(con, "artifact_rewrite_prompt")
+                  or _DEFAULT_ARTIFACT_REWRITE_PROMPT)
+    finally:
+        con.close()
+    # the policy carries the no-execution/no-fence invariants; a custom
+    # instruction refines it rather than replacing it
+    system = policy
+    if body.instruction:
+        system += "\n\nThe user's instruction for this rewrite: " + body.instruction
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content":
+            f"Rewrite this {row['kind']} artifact"
+            + (f" ({row['language']})" if row["language"] else "")
+            + ".\n\nCurrent artifact:\n\n" + row["content"]
+            + "\n\nReturn the complete rewritten artifact only."},
+    ]
+    prompt_chars = len(system) + len(messages[1]["content"])
+    async with httpx.AsyncClient() as client:
+        text, usage = await complete_safe(provider, api_key, model, messages,
+                                          {"temperature": 0.3}, client)
+    err = usage.pop("__error__", None) if usage else None
+    if err:
+        raise HTTPException(502, err)
+    text = _strip_fence(text)
+    if not text.strip():
+        raise HTTPException(502, "empty rewrite")
+    if len(text) > MAX_ARTIFACT_CHARS:
+        raise HTTPException(400, f"rewrite too long (max {MAX_ARTIFACT_CHARS} chars)")
+    con = db.connect()
+    try:
+        saved = _insert_artifact_version(con, row, text, None)
+        u = _usage_record(price, usage, prompt_chars, text)
+        return {"artifact": saved, "usage": u}
+    finally:
+        con.close()
+
+
+@router.post("/artifacts/{artifact_id}/share")
+def share_artifact(artifact_id: str):
+    """Create (or return) a secret read-only link to the artifact's latest version."""
+    con = db.connect()
+    try:
+        row = _load_artifact(con, artifact_id)
+        chat = con.execute("SELECT temporary FROM chats WHERE id=?",
+                           (row["chat_id"],)).fetchone()
+        if chat and chat["temporary"]:
+            raise HTTPException(400, "temporary chats cannot be shared")
+        existing = con.execute("SELECT token FROM artifact_shares WHERE root_id=?",
+                               (row["root_id"],)).fetchone()
+        if existing:
+            return {"url": f"/pa/{existing['token']}"}
+        token = secrets.token_urlsafe(24)
+        con.execute("INSERT INTO artifact_shares (token, root_id, created_at) "
+                    "VALUES (?,?,?)", (token, row["root_id"], now()))
+        con.commit()
+        return {"url": f"/pa/{token}"}
+    finally:
+        con.close()
+
+
+@router.delete("/artifacts/{artifact_id}/share")
+def unshare_artifact(artifact_id: str):
+    con = db.connect()
+    try:
+        row = _load_artifact(con, artifact_id)
+        con.execute("DELETE FROM artifact_shares WHERE root_id=?", (row["root_id"],))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
+@router.get("/public/artifact/{token}")
+def public_artifact(token: str):
+    """Read-only artifact content for a share token. Deliberately unauthenticated:
+    the token is the secret. Serves the latest version of the shared root."""
+    con = db.connect()
+    try:
+        row = con.execute(
+            "SELECT a.title, a.kind, a.language, a.content, a.version, a.created_at "
+            "FROM artifact_shares s JOIN artifacts a ON a.root_id = s.root_id "
+            "WHERE s.token=? ORDER BY a.version DESC LIMIT 1", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "share not found")
+        return {"app": "opentyper", **dict(row)}
     finally:
         con.close()
 

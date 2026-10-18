@@ -70,6 +70,8 @@
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M9 4v16M15 4v16" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
   <symbol id="i-offline" viewBox="0 0 24 24"><path d="M2 2l20 20M8.5 16.4A5 5 0 018 6a5 5 0 017.6.6M5 12.5a8 8 0 011.7-1.8M12 20a2 2 0 100.01 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M9 6L3 12l6 6M15 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
 <div id="offline-banner" hidden role="status">Offline — reconnecting…</div>
@@ -103,6 +105,7 @@
       <button id="btn-fork" class="icon-btn" title="Fork chat (copy to a new chat)" aria-label="Fork chat"><svg class="icon"><use href="#i-branch"/></svg></button>
       <button id="btn-regen" class="icon-btn" title="Regenerate (⌘⌥E)" aria-label="Regenerate"><svg class="icon"><use href="#i-refresh"/></svg></button>
       <button id="btn-finalize" class="icon-btn" title="Synthesize multi-model replies into one answer" aria-label="Finalize replies" hidden><svg class="icon"><use href="#i-spark"/></svg></button>
+      <button id="btn-artifacts" class="icon-btn" title="Artifacts of this chat" aria-label="Artifacts" hidden><svg class="icon"><use href="#i-code"/></svg></button>
       <button id="btn-del-chat" class="icon-btn" title="Delete chat" aria-label="Delete chat"><svg class="icon"><use href="#i-trash"/></svg></button>
     </header>
 
@@ -167,6 +170,48 @@
       </div>
     </footer>
   </main>
+
+  <!-- artifacts docked panel -->
+  <aside id="artifacts" hidden role="dialog" aria-label="Artifacts">
+    <div class="ar-head">
+      <svg class="icon"><use href="#i-code"/></svg>
+      <input id="ar-title" placeholder="Untitled artifact" aria-label="Artifact title">
+      <span id="ar-ver" class="hint" title="Version"></span>
+      <button id="ar-prev" class="icon-btn" title="Previous version" aria-label="Previous version"><svg class="icon"><use href="#i-chevron-left"/></svg></button>
+      <button id="ar-next" class="icon-btn" title="Next version" aria-label="Next version"><svg class="icon"><use href="#i-chevron-right"/></svg></button>
+      <button id="ar-close" class="icon-btn" title="Close" aria-label="Close artifacts"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="ar-tabs" role="tablist">
+      <button id="ar-tab-preview" class="on" role="tab" aria-selected="true">Preview</button>
+      <button id="ar-tab-code" role="tab" aria-selected="false">Code</button>
+      <button id="ar-tab-versions" role="tab" aria-selected="false">Versions</button>
+    </div>
+    <div id="ar-body">
+      <iframe id="ar-frame" sandbox="allow-scripts" title="Artifact preview" hidden></iframe>
+      <div id="ar-md" class="ar-md" hidden></div>
+      <textarea id="ar-code" spellcheck="false" aria-label="Artifact source" hidden></textarea>
+      <div id="ar-versions" class="ar-list" hidden></div>
+      <div id="ar-list" class="ar-list" hidden></div>
+      <div id="ar-empty" class="ar-empty hint" hidden>No artifacts yet — use the
+        <strong>Artifact</strong> button on a code block in the chat.</div>
+    </div>
+    <div class="ar-rewrite">
+      <div class="ar-chips">
+        <button class="ar-chip" data-i="Make it noticeably shorter while preserving all behaviour and content.">Shorter</button>
+        <button class="ar-chip" data-i="Make it richer and more detailed; keep the existing structure recognisable.">Longer</button>
+        <button class="ar-chip" data-i="Find and fix bugs, invalid markup and accessibility problems without changing behaviour.">Fix bugs</button>
+        <button class="ar-chip" data-i="Improve naming, formatting and readability without changing behaviour.">Polish</button>
+      </div>
+      <textarea id="ar-instruction" rows="2" placeholder="Tell the AI how to rewrite this… (or pick a chip)" aria-label="Rewrite instruction"></textarea>
+      <div class="ar-actions">
+        <button id="ar-rewrite" class="primary"><svg class="icon"><use href="#i-wand"/></svg><span>Rewrite</span></button>
+        <button id="ar-save"><svg class="icon"><use href="#i-check"/></svg><span>Save version</span></button>
+        <button id="ar-copy" class="icon-btn" title="Copy" aria-label="Copy artifact"><svg class="icon"><use href="#i-copy"/></svg></button>
+        <button id="ar-download" class="icon-btn" title="Download" aria-label="Download artifact"><svg class="icon"><use href="#i-download"/></svg></button>
+        <button id="ar-delete" class="icon-btn" title="Delete artifact" aria-label="Delete artifact"><svg class="icon"><use href="#i-trash"/></svg></button>
+      </div>
+    </div>
+  </aside>
 </div>
 
 <!-- side chat floating panel -->

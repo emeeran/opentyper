@@ -409,17 +409,22 @@ export function settingsModal(tab = "general") {
       <div class="row"><label>Memory extraction</label></div>
       <div class="row"><textarea id="ip-memory" rows="4"
         placeholder="Extract durable facts about the user as a JSON array…">${s.memory_extract_prompt || ""}</textarea></div>
+      <div class="row"><label>Artifact rewrite (Artifacts panel)</label></div>
+      <div class="row"><textarea id="ip-rewrite" rows="4"
+        placeholder="You are rewriting an existing artifact…">${s.artifact_rewrite_prompt || ""}</textarea></div>
       <div class="row"><button class="primary" id="ip-save">Save</button>
         <button id="ip-reset">Reset to defaults</button></div>`;
     $("#ip-save").onclick = async () => {
       state.settings = await apiJson("/settings", { method: "PUT", body: {
         finalize_prompt: $("#ip-finalize").value.trim() || null,
-        memory_extract_prompt: $("#ip-memory").value.trim() || null } });
+        memory_extract_prompt: $("#ip-memory").value.trim() || null,
+        artifact_rewrite_prompt: $("#ip-rewrite").value.trim() || null } });
       toast("Internal prompts saved");
     };
     $("#ip-reset").onclick = async () => {
       state.settings = await apiJson("/settings", { method: "PUT", body: {
-        finalize_prompt: "", memory_extract_prompt: "" } });
+        finalize_prompt: "", memory_extract_prompt: "",
+        artifact_rewrite_prompt: "" } });
       settingsModal("prompts");
       toast("Reset");
     };

@@ -425,9 +425,135 @@ def test_elevenlabs_requires_key_and_valid_voice(client):
 def test_new_settings_roundtrip(client):
     r = client.put("/api/settings", json={
         "service_worker": True, "finalize_prompt": "FUSE",
-        "memory_extract_prompt": "EXTRACT", "shortcuts": {"search": "Mod+K"}})
+        "memory_extract_prompt": "EXTRACT", "artifact_rewrite_prompt": "REWRITE",
+        "shortcuts": {"search": "Mod+K"}})
     s = r.json()
     assert s["service_worker"] is True
     assert s["finalize_prompt"] == "FUSE"
+    assert s["artifact_rewrite_prompt"] == "REWRITE"
     assert s["shortcuts"] == {"search": "Mod+K"}
     assert client.get("/api/health").json()["rev"] >= 2
+
+
+# --- artifacts (side-panel editor, versions, AI rewrite) ----------------------------------
+
+def _artifact(client, chat, content="<h1>Demo page</h1>", kind="html", **kw):
+    return client.post(f"/api/chats/{chat}/artifacts",
+                       json={"content": content, "kind": kind, **kw})
+
+
+def test_artifact_create_and_latest_per_root(client, chat):
+    a1 = _artifact(client, chat).json()
+    assert a1["version"] == 1 and a1["root_id"] == a1["id"]
+    assert a1["title"]  # derived from the first non-blank line
+    a2 = _artifact(client, chat, content="print('hi')", kind="code",
+                   language="Python").json()
+    assert a2["language"] == "python"  # lowercased fence info
+    # save a new version of the first root
+    put = client.put(f"/api/artifacts/{a1['id']}",
+                     json={"content": "<h2>v2</h2>"}).json()
+    assert put["version"] == 2 and put["root_id"] == a1["root_id"]
+    listing = client.get(f"/api/chats/{chat}/artifacts").json()
+    assert len(listing) == 2  # still two roots, not three rows
+    by_root = {a["root_id"]: a for a in listing}
+    assert by_root[a1["root_id"]]["version"] == 2           # MAX picked the new row
+    assert by_root[a1["root_id"]]["content"] == "<h2>v2</h2>"
+    assert by_root[a1["root_id"]]["versions"] == 2
+    assert by_root[a2["root_id"]]["version"] == 1
+
+
+def test_artifact_version_chain_meta(client, chat):
+    a = _artifact(client, chat).json()
+    client.put(f"/api/artifacts/{a['id']}", json={"content": "v2"})
+    r = client.get(f"/api/artifacts/{a['id']}/versions")
+    assert r.status_code == 200
+    chain = r.json()
+    assert [v["version"] for v in chain] == [1, 2]
+    assert set(chain[0]) == {"id", "version", "title", "kind", "language",
+                             "size", "created_at"}  # meta only — no content
+
+
+def test_artifact_404s_and_kind_validation(client, chat):
+    assert client.post("/api/chats/nope/artifacts",
+                       json={"content": "x"}).status_code == 404
+    assert client.get("/api/artifacts/nope").status_code == 404
+    assert client.put("/api/artifacts/nope",
+                      json={"content": "x"}).status_code == 404
+    assert _artifact(client, chat, kind="exe").status_code == 422
+
+
+def test_artifact_delete_removes_root_chain(client, chat):
+    a = _artifact(client, chat).json()
+    for i in range(2):
+        client.put(f"/api/artifacts/{a['id']}", json={"content": f"v{i + 2}"})
+    r = client.delete(f"/api/artifacts/{a['id']}")
+    assert r.json() == {"ok": True, "deleted": 3}
+    assert client.get(f"/api/artifacts/{a['id']}").status_code == 404
+    assert client.get(f"/api/chats/{chat}/artifacts").json() == []
+
+
+def test_chat_delete_cascades_artifacts(client):
+    chat_id = client.post("/api/chats",
+                          json={"model": "gpt-4o", "provider_id": "openai"}).json()["id"]
+    a = _artifact(client, chat_id).json()
+    assert client.delete(f"/api/chats/{chat_id}").json() == {"ok": True}
+    assert client.get(f"/api/artifacts/{a['id']}").status_code == 404
+
+
+def test_artifact_rewrite_creates_new_version(client, chat, mock_provider):
+    a = _artifact(client, chat, content="<p>original</p>").json()
+    r = client.post(f"/api/artifacts/{a['id']}/rewrite", json={})
+    assert r.status_code == 200
+    out = r.json()
+    assert out["artifact"]["version"] == 2
+    assert out["artifact"]["root_id"] == a["root_id"]
+    assert out["artifact"]["content"] == "<p>REWRITTEN ARTIFACT BODY</p>"  # fence stripped
+    assert out["usage"]["completion_tokens"] > 0
+    sent = mock_provider.requests[-1]
+    assert "rewriting an existing artifact" in sent["messages"][0]["content"]
+    assert "<p>original</p>" in sent["messages"][1]["content"]
+
+
+def test_artifact_rewrite_custom_instruction_appends(client, chat, mock_provider):
+    a = _artifact(client, chat).json()
+    client.post(f"/api/artifacts/{a['id']}/rewrite",
+                json={"instruction": "REORDER THE SECTIONS"})
+    system = mock_provider.requests[-1]["messages"][0]["content"]
+    assert system.startswith("You are rewriting an existing artifact")
+    assert system.endswith("REORDER THE SECTIONS")  # refines the policy, keeps it
+
+
+def test_artifact_rewrite_settings_prompt_replaces(client, chat, mock_provider):
+    client.put("/api/settings", json={"artifact_rewrite_prompt": "TIGHTEN THE CODE"})
+    a = _artifact(client, chat).json()
+    client.post(f"/api/artifacts/{a['id']}/rewrite", json={})
+    assert mock_provider.requests[-1]["messages"][0]["content"] == "TIGHTEN THE CODE"
+
+
+def test_artifact_rewrite_too_large(client, chat):
+    a = _artifact(client, chat, content="x" * 40_001).json()
+    r = client.post(f"/api/artifacts/{a['id']}/rewrite", json={})
+    assert r.status_code == 400 and "too large" in r.json()["detail"]
+
+
+def test_artifact_share_roundtrip_and_revoke(client, chat):
+    a = _artifact(client, chat).json()
+    client.put(f"/api/artifacts/{a['id']}", json={"content": "<p>v2</p>"})
+    url = client.post(f"/api/artifacts/{a['id']}/share").json()["url"]
+    assert url.startswith("/pa/")
+    assert client.post(f"/api/artifacts/{a['id']}/share").json()["url"] == url  # idempotent
+    page = client.get(url)
+    assert page.status_code == 200 and "Shared artifact" in page.text
+    data = client.get(f"/api/public/artifact/{url.split('/')[-1]}").json()
+    assert data["content"] == "<p>v2</p>" and data["version"] == 2  # latest version
+    assert client.delete(f"/api/artifacts/{a['id']}/share").json() == {"ok": True}
+    assert client.get(f"/api/public/artifact/{url.split('/')[-1]}").status_code == 404
+
+
+def test_artifact_share_blocked_for_temporary_chat(client, mock_provider):
+    tid = client.post("/api/chats",
+                      json={"model": "gpt-4o", "provider_id": "openai",
+                            "temporary": True}).json()["id"]
+    a = _artifact(client, tid).json()
+    r = client.post(f"/api/artifacts/{a['id']}/share")
+    assert r.status_code == 400 and "temporary" in r.json()["detail"]

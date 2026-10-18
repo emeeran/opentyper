@@ -76,7 +76,7 @@ Legend: **done** = implemented + tested · **partial** = implemented, gaps noted
 | **Image generation** | **done** | OpenAI-compatible `/images/generations` + Gemini image models; saved to uploads, dropped into the chat |
 | Voice input / TTS | **done** | browser voices, Edge neural, **ElevenLabs** (key stored encrypted); player bar with seek |
 | Draft autosave, sound, wide mode, `?q=` prefill | **done** | |
-| Artifacts | **partial** | sandboxed iframe preview + in-app editing of assistant replies; no interactive canvas co-editing (Phase-3 candidate) |
+| Artifacts | **done** | **Artifacts v2**: docked side-panel editor (Preview sandboxed iframe / Code / Versions tabs), per-chat artifact list, server-side version chain (every save + rewrite = a new version, `‹ n/m ›` switcher), AI rewrite (preset chips + custom instruction, editable internal prompt), per-artifact secret share link (`/pa/…`); open from any code block's "Artifact" button |
 | PWA | **partial** | manifest + **opt-in service worker** (cache keyed to backend REV, network-first `/api`, cache-first static) — off by default to avoid stale-asset bugs |
 
 ## Platform / UI
@@ -111,16 +111,19 @@ supported; the store is not).
 
 ## Verification
 
-- `uv run pytest tests/ -q` — **86 passed** (was 53): variants, finalize,
+- `uv run pytest tests/ -q` — **97 passed** (was 53): variants, finalize,
   side chat, memories + extraction, skills + injection, stats, image
   generation, hybrid retrieval, PDF extraction, import converters, temporary
   chats, reasoning/caching/language dialect bodies, deprecated models,
-  ElevenLabs guards, new settings.
-- `uv run --with playwright python scripts/browser_check.py` — **62/62**
+  ElevenLabs guards, new settings, **artifacts (CRUD, version chain, rewrite
+  incl. fence-stripping + prompt semantics, share roundtrip, cascades)**.
+- `uv run --with playwright python scripts/browser_check.py` — **71/71**
   (was 46): adds variant switcher, pin toggle, message delete with in-app
   confirm, finalize, side chat (creates no server chat), full-screen composer,
-  XSS-neutralization probe, memory panel, usage dashboard, shortcuts UI, plus
-  the asset list (DOMPurify, modules, sw.js).
+  XSS-neutralization probe, memory panel, usage dashboard, shortcuts UI,
+  **artifact editor (open → hand edit → save v2 → AI rewrite v3 → version
+  switcher → list view, sandboxed iframe, public share page)**, plus the asset
+  list (DOMPurify, modules incl. artifacts.js, sw.js).
 
 ## UNRESOLVED
 

@@ -6,6 +6,7 @@
 import { $, $$, uuid, copyText, resolvedTheme } from "./util.js";
 import { toast } from "./toast.js";
 import { previewArtifact } from "./modal.js";
+import { openArtifactFromBlock } from "./artifacts.js";
 
 marked.use({ breaks: true });
 
@@ -196,6 +197,12 @@ export function renderMd(text, { mathSpans = null, host = null } = {}) {
     }));
     if (/language-html|language-htm|\bhtml\b/.test(block.className)) {
       wrap.append(mk("Preview", () => previewArtifact(block.textContent), "copy preview"));
+    }
+    const lang = (block.className.match(/language-([\w-]+)/) || [])[1] || "";
+    if (lang && !/^mermaid$/i.test(lang)) {
+      wrap.append(mk("Artifact", () =>
+        openArtifactFromBlock({ content: block.textContent, language: lang }),
+      "copy artifact"));
     }
     if (/^codepen$/i.test((block.className.match(/language-([\w-]+)/) || [])[1] || "") ||
         (/language-css|language-js/.test(block.className))) {

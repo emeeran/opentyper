@@ -10,6 +10,7 @@ import { openModal, closeModal, confirmDialog, formDialog, fillTemplate,
          previewAttachment, shareDialog } from "./modal.js";
 import { renderMd, renderMdLite, finalizeMd } from "./markdown.js";
 import { speak, stopAudio, fmtVoiceSettings } from "./tts.js";
+import { updateArtifactsVisibility } from "./artifacts.js";
 
 export function currentChat() {
   return state.chats.find((c) => c.id === state.currentId) ||
@@ -59,6 +60,7 @@ function renderSideChatModels() {
 
 export function renderEmpty() {
   $("#messages").textContent = "";
+  updateArtifactsVisibility();
   const hint = document.createElement("div");
   hint.id = "empty-hint";
   hint.innerHTML = `<h2>OpenTyper</h2>
@@ -111,6 +113,7 @@ export async function openChat(id) {
   renderAttachments();
   updateCtxMeter(detail.messages);
   updateFinalizeVisibility();
+  updateArtifactsVisibility();
   $("#btn-fullscreen")?.classList.remove("on");
   $("#composer").classList.remove("fullscreen");
   if (window.innerWidth <= 760) $("#sidebar").classList.add("closed");

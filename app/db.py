@@ -182,6 +182,27 @@ CREATE TABLE IF NOT EXISTS agents_skills_link (
   skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
   PRIMARY KEY (agent_id, skill_id)
 );
+
+CREATE TABLE IF NOT EXISTS artifacts (
+  id          TEXT PRIMARY KEY,
+  root_id     TEXT NOT NULL,   -- shared by every version of one artifact
+  chat_id     TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  message_id  TEXT REFERENCES messages(id) ON DELETE SET NULL,
+  title       TEXT NOT NULL DEFAULT 'Untitled artifact',
+  kind        TEXT NOT NULL CHECK (kind IN ('html','svg','markdown','code')),
+  language    TEXT,            -- fence info string, lowercased (e.g. 'python')
+  content     TEXT NOT NULL,
+  version     INTEGER NOT NULL,
+  created_at  TEXT NOT NULL,
+  UNIQUE (root_id, version)    -- makes concurrent saves safe: the loser retries
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_chat ON artifacts(chat_id, created_at);
+
+CREATE TABLE IF NOT EXISTS artifact_shares (
+  token      TEXT PRIMARY KEY,  -- random url-safe capability token
+  root_id    TEXT NOT NULL UNIQUE,  -- no FK possible: root_id is not a key
+  created_at TEXT NOT NULL
+);
 """
 
 # Columns added after the first release: (table, column, declaration).
