@@ -116,7 +116,7 @@ supported; the store is not).
   generation, hybrid retrieval, PDF extraction, import converters, temporary
   chats, reasoning/caching/language dialect bodies, deprecated models,
   ElevenLabs guards, new settings.
-- `uv run --with playwright python scripts/browser_check.py` — **60/60**
+- `uv run --with playwright python scripts/browser_check.py` — **62/62**
   (was 46): adds variant switcher, pin toggle, message delete with in-app
   confirm, finalize, side chat (creates no server chat), full-screen composer,
   XSS-neutralization probe, memory panel, usage dashboard, shortcuts UI, plus

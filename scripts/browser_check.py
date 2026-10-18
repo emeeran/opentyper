@@ -30,6 +30,9 @@ CHROME = "/usr/bin/google-chrome"
 PNG_1PX = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQAB"
     "h6FO1AAAAABJRU5ErkJggg==")
+# real edge-tts output: the TTS route stub below serves it so the <audio> path
+# is exercised with valid audio instead of live synthesis
+TTS_MP3 = (Path(__file__).resolve().parent / "tts-sample.mp3").read_bytes()
 
 
 def free_port() -> int:
@@ -284,7 +287,17 @@ def main() -> int:
             "button" in (page.get_attribute("#artifact", "srcdoc") or ""))
         page.keyboard.press("Escape")
 
-        # --- TTS bar + mic (bar wiring only; audio needs a desktop session) ---
+        # --- TTS bar + mic (route-stubbed with valid MP3; no live synthesis) ---
+        tts_hits: list[str] = []
+
+        def _tts_route(route):
+            if "text=" in route.request.url:
+                tts_hits.append(route.request.url)
+                route.fulfill(status=200, content_type="audio/mpeg", body=TTS_MP3)
+            else:
+                route.continue_()  # let /api/tts/voices (settings) through
+
+        page.route("**/api/tts*", _tts_route)
         page.click("#btn-settings")
         page.wait_for_selector("#s-tts-source")
         page.select_option("#s-tts-source", "edge")  # browser voices absent here
@@ -292,11 +305,18 @@ def main() -> int:
         settle()
         page.keyboard.press("Escape")
         settle()
+        toasts = page.locator("#toasts")
         page.locator(".msg.assistant button", has_text="Speak").first.click()
+        page.wait_for_selector("#tts-bar:not([hidden])", timeout=5000)
         ok("TTS player bar appears", page.is_visible("#tts-bar"))
-        settle()  # synthesis may error out (no network/audio) and hide the bar
+        ok("edge speech calls /api/tts (rewrite regression: /api/tts/tts 404'd)",
+           any(u.split("?")[0].endswith("/api/tts") for u in tts_hits))
+        ok("no TTS server-failure toast", not (
+            "unreachable" in toasts.inner_text() or " failed:" in toasts.inner_text()
+            or "Speech failed" in toasts.inner_text()))
         if page.is_visible("#tts-stop"):
             page.click("#tts-stop")
+        page.unroute("**/api/tts*", _tts_route)
         page.click("#btn-mic")  # SpeechRecognition absent in headless -> toast, no crash
         settle()
 

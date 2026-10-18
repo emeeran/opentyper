@@ -58,7 +58,7 @@ Verify everything end-to-end without any provider account:
 ```bash
 uv run pytest tests/ -q                                  # 86 tests
 uv run scripts/demo.py                                   # app + mock provider, streams a chat
-uv run --with playwright python scripts/browser_check.py # 60 UI checks in headless Chrome
+uv run --with playwright python scripts/browser_check.py # 62 UI checks in headless Chrome
 ```
 
 The browser pass drives the real SPA (stream, stop, regenerate, edit & re-run,
@@ -184,7 +184,7 @@ provider keys to survive a restore.
 ## Status
 
 See `docs/parity.md` for the feature parity table. Verified by 86 pytest
-endpoint tests, the SSE demo, and a 60-check automated browser pass
+endpoint tests, the SSE demo, and a 62-check automated browser pass
 (`scripts/browser_check.py`). Still recommended before real use: one manual
 look on a phone (responsive layout is CSS-only) and a live-provider smoke
 test with a real key (open items in parity.md → UNRESOLVED).

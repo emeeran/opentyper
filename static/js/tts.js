@@ -14,6 +14,7 @@ export function stopAudio() {
     player.audio.removeAttribute("src");
     player.audio = null;
   }
+  if (player.url) { URL.revokeObjectURL(player.url); player.url = null; }
   $("#tts-bar").hidden = true;
 }
 
@@ -38,28 +39,60 @@ export function saveVoiceSettings() {
     auto: $("#s-autospeak").checked }));
 }
 
-function playServerAudio(kind, text, voice) {
+/* Server voices (edge / elevenlabs): fetch first so an API error surfaces as
+   one precise toast instead of the <audio> element's cryptic decode failure.
+   Falls back to the browser's Web Speech voices so speech still works. */
+async function playServerAudio(path, params, text, cfg, label) {
   stopAudio();
   speechSynthesis?.cancel?.();
-  const a = new Audio(`/api/tts/${kind}?text=${encodeURIComponent(text.slice(0, 5000))}`
-    + `&voice=${encodeURIComponent(voice)}`);
+  const seq = (player.seq = (player.seq || 0) + 1); // a newer click supersedes this fetch
+  $("#tts-voice").textContent = params.voice;
+  $("#tts-bar").hidden = false;
+  let res;
+  try {
+    res = await fetch(`/api/${path}?${new URLSearchParams(params)}`);
+  } catch (e) {
+    return serverFallback(text, cfg, `${label} unreachable: ${e.message}`);
+  }
+  if (seq !== player.seq) return; // user clicked again while we were fetching
+  if (!res.ok || !(res.headers.get("content-type") || "").startsWith("audio/")) {
+    let detail = res.statusText || String(res.status);
+    try { detail = (await res.json())?.detail || detail; } catch { /* not json */ }
+    return serverFallback(text, cfg, `${label} failed: ${detail}`);
+  }
+  player.url = URL.createObjectURL(await res.blob());
+  if (seq !== player.seq) { URL.revokeObjectURL(player.url); player.url = null; return; }
+  const a = new Audio(player.url);
   player.audio = a;
-  const bar = $("#tts-bar");
   const seek = $("#tts-seek"), time = $("#tts-time");
-  $("#tts-voice").textContent = voice;
-  bar.hidden = false;
   a.ontimeupdate = () => {
     if (a.duration) seek.value = (a.currentTime / a.duration) * 1000;
     time.textContent = `${fmtTime(a.currentTime)} / ${fmtTime(a.duration)}`;
   };
   a.onended = () => stopAudio();
+  let dead = false;
   a.onerror = () => {
-    toast(kind === "elevenlabs"
-      ? "ElevenLabs speech failed — check the key in Settings"
-      : "Speech failed — is the server's edge-tts able to reach the service?", true);
+    if (dead) return;
+    dead = true;
+    toast(`${label} returned audio the browser can't play`, true);
     stopAudio();
   };
-  a.play().catch((e) => toast(`Playback blocked: ${e.message}`, true));
+  a.play().catch((e) => {
+    if (dead) return;
+    dead = true;
+    toast(`Playback blocked: ${e.message}`, true);
+    stopAudio();
+  });
+}
+
+function serverFallback(text, cfg, reason) {
+  stopAudio();
+  if ("speechSynthesis" in window) {
+    toast(`${reason} — using the browser voice instead`);
+    speakBrowser(text, cfg);
+  } else {
+    toast(reason, true);
+  }
 }
 
 export function wireTtsBar() {
@@ -76,17 +109,7 @@ export function wireTtsBar() {
   };
 }
 
-export function speak(text) {
-  const cfg = fmtVoiceSettings();
-  if (cfg.source === "edge") {
-    if (player.audio) { stopAudio(); return; }
-    return playServerAudio("tts", text, cfg.edgeVoice);
-  }
-  if (cfg.source === "elevenlabs") {
-    if (player.audio) { stopAudio(); return; }
-    if (!cfg.elevenVoice) return toast("Pick an ElevenLabs voice in Settings first", true);
-    return playServerAudio("tts/elevenlabs", text, cfg.elevenVoice);
-  }
+function speakBrowser(text, cfg) {
   if (!("speechSynthesis" in window)) return toast("No speech support in this browser", true);
   if (player.audio) stopAudio();
   if (speechSynthesis.speaking || speechSynthesis.pending) {
@@ -105,4 +128,20 @@ export function speak(text) {
   tts.current = u; // prevent GC cancelling playback
   u.onend = () => { tts.current = null; };
   speechSynthesis.speak(u);
+}
+
+export function speak(text) {
+  const cfg = fmtVoiceSettings();
+  if (cfg.source === "edge") {
+    if (player.audio) { stopAudio(); return; }
+    return void playServerAudio("tts",
+      { text: text.slice(0, 5000), voice: cfg.edgeVoice }, text, cfg, "Edge voices");
+  }
+  if (cfg.source === "elevenlabs") {
+    if (player.audio) { stopAudio(); return; }
+    if (!cfg.elevenVoice) return toast("Pick an ElevenLabs voice in Settings first", true);
+    return void playServerAudio("tts/elevenlabs",
+      { text: text.slice(0, 5000), voice: cfg.elevenVoice }, text, cfg, "ElevenLabs");
+  }
+  speakBrowser(text, cfg);
 }

@@ -2,7 +2,7 @@
 
 Executed 2026-10-18 against `improve_plan.md` (this directory). Verification: `uv run pytest
 tests/ -q` → **86 passed** · `uv run --with playwright python
-scripts/browser_check.py` → **60/60** · `uv run ruff check .` clean.
+scripts/browser_check.py` → **62/62** · `uv run ruff check .` clean.
 `docs/parity.md` + `docs/spec.md` updated in the same change.
 
 Effort: S ≤½d · M 1–3d · L 3–10d · XL >10d
@@ -70,7 +70,7 @@ Effort: S ≤½d · M 1–3d · L 3–10d · XL >10d
 ## Standing gates
 
 - [x] `uv run pytest tests/ -q` green — 86 passed (baseline 53)
-- [x] `scripts/browser_check.py` green — 60/60 (baseline 46); no page errors
+- [x] `scripts/browser_check.py` green — 62/62 (baseline 46); no page errors
 - [ ] Perf budget (60fps @ 500-message chat, <16 ms p95 stream frames) — not benchmarked in this environment; architecture is in place (throttled stream render, append-only DOM, render cap)
 - [ ] No >100 KB script before first interaction — not an automated check; mermaid/katex/pdf are dynamic imports so they cannot load eagerly
 - [x] No new secrets/logs of keys; share pages exclude memories/documents; temporary chats excluded from lists/search/export/shares
