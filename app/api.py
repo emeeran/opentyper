@@ -21,7 +21,7 @@ from . import crypto, db, providers, tts, vectors
 
 router = APIRouter(prefix="/api")
 
-REV = 4  # bumped per release; the service worker keys its cache on this
+REV = 5  # bumped per release; the service worker keys its cache on this
 
 _bg_tasks: set[asyncio.Task] = set()
 

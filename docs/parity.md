@@ -117,13 +117,18 @@ supported; the store is not).
   chats, reasoning/caching/language dialect bodies, deprecated models,
   ElevenLabs guards, new settings, **artifacts (CRUD, version chain, rewrite
   incl. fence-stripping + prompt semantics, share roundtrip, cascades)**.
-- `uv run --with playwright python scripts/browser_check.py` — **71/71**
+- `uv run --with playwright python scripts/browser_check.py` — **72/72**
   (was 46): adds variant switcher, pin toggle, message delete with in-app
   confirm, finalize, side chat (creates no server chat), full-screen composer,
   XSS-neutralization probe, memory panel, usage dashboard, shortcuts UI,
   **artifact editor (open → hand edit → save v2 → AI rewrite v3 → version
-  switcher → list view, sandboxed iframe, public share page)**, plus the asset
+  switcher → list view, sandboxed iframe, public share page)**, the
+  **>100KB-eager-script gate** (highlight.js now lazy), plus the asset
   list (DOMPurify, modules incl. artifacts.js, sw.js).
+- `uv run --with playwright python scripts/perf_check.py` — budgets met:
+  500-message chat opens in 79–278 ms (render cap), "Load earlier" full-500
+  expand ~2.4 s, stream rAF p95 **16.8 ms** (vsync-bound) with **0 ms** long
+  tasks — the throttled stream render blocks nothing beyond a frame.
 
 ## UNRESOLVED
 

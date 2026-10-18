@@ -54,6 +54,34 @@ async function ensureKatex() {
   return katexLoading;
 }
 
+/* highlight.js (127 KB) loads on first code block only — keeps the eager
+   bundle under the 100 KB-per-script budget. UMD build → script injection. */
+let hljsLoading = null;
+function ensureHljs() {
+  if (window.hljs) return Promise.resolve();
+  if (!hljsLoading) {
+    hljsLoading = new Promise((resolve) => {
+      const s = document.createElement("script");
+      s.src = "/vendor/highlight.min.js";
+      s.onload = resolve;
+      document.head.append(s);
+    }).catch(() => { hljsLoading = null; });
+  }
+  return hljsLoading;
+}
+
+function highlight(block) {
+  if (window.hljs) {
+    try { hljs.highlightElement(block); } catch { /* unknown language */ }
+    return;
+  }
+  void ensureHljs().then(() => {
+    if (window.hljs) {
+      try { hljs.highlightElement(block); } catch { /* unknown language */ }
+    }
+  });
+}
+
 function applyMath(fragment, spans) {
   if (!spans.length) return;
   const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
@@ -177,7 +205,7 @@ export function renderMd(text, { mathSpans = null, host = null } = {}) {
   tpl.innerHTML = html;
   // highlight + copy / preview / CodePen on code blocks
   $$("pre code", tpl.content).forEach((block) => {
-    try { hljs.highlightElement(block); } catch { /* unknown language */ }
+    highlight(block);
     const pre = block.parentElement;
     const wrap = document.createElement("div");
     wrap.className = "code-wrap";

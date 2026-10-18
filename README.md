@@ -29,7 +29,8 @@ opentyper/
 │                   marked/highlight/DOMPurify + lazy mermaid/katex/pdf.js)
 ├── tests/          pytest suite + mock provider
 ├── scripts/        demo.py (SSE smoke) · browser_check.py (full UI pass, headless
-│                   Chrome) · live_smoke.py (real-provider smoke)
+│                   Chrome) · perf_check.py (render/stream budgets) · live_smoke.py
+│                   (real-provider smoke)
 ├── deploy/         install.sh, build_deb.sh, nginx.conf.example, backup.sh
 └── docs/           recon + recon-premium, assumptions, spec, parity,
                      improve_plan (executed), TODO (checklist)
@@ -59,7 +60,8 @@ Verify everything end-to-end without any provider account:
 ```bash
 uv run pytest tests/ -q                                  # 97 tests
 uv run scripts/demo.py                                   # app + mock provider, streams a chat
-uv run --with playwright python scripts/browser_check.py # 71 UI checks in headless Chrome
+uv run --with playwright python scripts/browser_check.py # 72 UI checks in headless Chrome
+uv run --with playwright python scripts/perf_check.py    # render/stream budgets
 ```
 
 The browser pass drives the real SPA (stream, stop, regenerate, edit & re-run,
@@ -185,7 +187,8 @@ provider keys to survive a restore.
 ## Status
 
 See `docs/parity.md` for the feature parity table. Verified by 97 pytest
-endpoint tests, the SSE demo, and a 71-check automated browser pass
+endpoint tests, the SSE demo, a 72-check automated browser pass, and
+`scripts/perf_check.py` render/stream budgets
 (`scripts/browser_check.py`). Still recommended before real use: one manual
 look on a phone (responsive layout is CSS-only) and a live-provider smoke
 test with a real key (open items in parity.md → UNRESOLVED).

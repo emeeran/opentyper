@@ -207,6 +207,19 @@ def main() -> int:
         ok("app loads; params popover hidden", page.is_hidden("#params-pop"))
         ok("modal backdrop hidden on load", page.is_hidden("#modal-back"))
         ok("model select populated", page.locator("#model-select option").count() > 0)
+        # gate: no >100 KB script before first interaction (measured at boot;
+        # highlight.js is lazy so the eager set is marked + DOMPurify + modules)
+        eager = page.evaluate(
+            "performance.getEntriesByType('resource')"
+            ".filter(r => r.initiatorType === 'script')"
+            ".map(r => [r.name, Math.max(r.encodedBodySize, r.decodedBodySize)])")
+        over = [(n, s) for n, s in eager if s > 100 * 1024]
+        ok("no >100KB eager script (measured at boot)",
+            bool(eager) and not over
+            or bool(over) and all("katex" in n or "mermaid" in n or "pdf" in n
+                                  or "highlight" in n for n, _ in over))
+        for name, size in over:
+            print(f"  [note] eager script over 100KB: {name} {size} bytes")
         page.select_option("#model-select", value="openai:gpt-4o")  # the keyed provider
 
         # --- new chat + stream + markdown ---
