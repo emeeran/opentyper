@@ -2,7 +2,7 @@
 
 Executed 2026-10-18 against `improve_plan.md` (this directory). Verification: `uv run pytest
 tests/ -q` → **97 passed** · `uv run --with playwright python
-scripts/browser_check.py` → **72/72** · `scripts/perf_check.py` within budget ·
+scripts/browser_check.py` → **76/76** · `scripts/perf_check.py` within budget ·
 `uv run ruff check .` clean.
 `docs/parity.md` + `docs/spec.md` updated in the same change.
 

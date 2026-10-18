@@ -222,6 +222,22 @@ def main() -> int:
             print(f"  [note] eager script over 100KB: {name} {size} bytes")
         page.select_option("#model-select", value="openai:gpt-4o")  # the keyed provider
 
+        # --- theme toggle (cycles system → light → dark, then back) ---
+        page.click("#btn-theme")
+        settle(150)
+        ok("theme toggle applies light", page.evaluate(
+            "document.documentElement.dataset.theme") == "light")
+        page.click("#btn-theme")
+        settle(150)
+        ok("theme toggle applies dark", page.evaluate(
+            "document.documentElement.dataset.theme") == "dark")
+        page.click("#btn-theme")
+        settle(150)
+        ok("theme toggle returns to system", page.evaluate(
+            "document.documentElement.dataset.theme") == "system")
+        ok("theme toggle icon tracks mode", page.get_attribute(
+            "#btn-theme use", "href") == "#i-monitor")
+
         # --- new chat + stream + markdown ---
         page.click("#btn-new-chat")
         settle()

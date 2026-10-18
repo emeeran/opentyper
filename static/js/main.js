@@ -124,6 +124,25 @@ function wireEvents() {
   $("#btn-memory").onclick = memoriesModal;
   $("#btn-usage").onclick = usageModal;
   $("#btn-settings").onclick = () => settingsModal();
+
+  // theme toggle: cycles system → light → dark, icon + label track the mode
+  const THEME_ORDER = ["system", "light", "dark"];
+  const THEME_ICON = { system: "i-monitor", light: "i-sun", dark: "i-moon" };
+  const paintThemeBtn = () => {
+    const t = state.settings.theme || "system";
+    $("#btn-theme use").setAttribute("href", "#" + THEME_ICON[t]);
+    $("#btn-theme span").textContent = "Theme: " + t;
+  };
+  $("#btn-theme").onclick = async () => {
+    const cur = state.settings.theme || "system";
+    const next = THEME_ORDER[(THEME_ORDER.indexOf(cur) + 1) % THEME_ORDER.length];
+    state.settings.theme = next;
+    applyTheme();
+    paintThemeBtn();
+    await apiJson("/settings", { method: "PUT", body: { theme: next } })
+      .catch(() => {}); // optimistically applied; persisted best-effort
+  };
+  paintThemeBtn();
   $("#btn-send").onclick = chat.send;
   $("#btn-stop").onclick = () => state.controller?.abort();
   $("#btn-regen").onclick = chat.regenerate;

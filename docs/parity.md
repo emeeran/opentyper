@@ -83,7 +83,7 @@ Legend: **done** = implemented + tested · **partial** = implemented, gaps noted
 
 | Feature | Status | Notes |
 |---|---|---|
-| Dark/light/system theme | **done** | full token scale; code-highlight theme swaps with the effective theme |
+| Dark/light/system theme | **done** | full token scale; code-highlight theme swaps with the effective theme; sidebar cycle toggle (system → light → dark) with sun/moon/monitor icon |
 | **Design system** | **done** | type/spacing/radius/shadow/z-index scales, semantic colors, 150–220 ms motion with `prefers-reduced-motion` guard |
 | **Icons** | **done** | inline SVG sprite (Lucide-style), no emoji, labelled |
 | **In-app dialogs** | **done** | confirm/form/template/share dialogs with focus trap + restore; no native `confirm()`/`prompt()` |
@@ -117,7 +117,7 @@ supported; the store is not).
   chats, reasoning/caching/language dialect bodies, deprecated models,
   ElevenLabs guards, new settings, **artifacts (CRUD, version chain, rewrite
   incl. fence-stripping + prompt semantics, share roundtrip, cascades)**.
-- `uv run --with playwright python scripts/browser_check.py` — **72/72**
+- `uv run --with playwright python scripts/browser_check.py` — **76/76**
   (was 46): adds variant switcher, pin toggle, message delete with in-app
   confirm, finalize, side chat (creates no server chat), full-screen composer,
   XSS-neutralization probe, memory panel, usage dashboard, shortcuts UI,

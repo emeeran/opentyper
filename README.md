@@ -60,7 +60,7 @@ Verify everything end-to-end without any provider account:
 ```bash
 uv run pytest tests/ -q                                  # 97 tests
 uv run scripts/demo.py                                   # app + mock provider, streams a chat
-uv run --with playwright python scripts/browser_check.py # 72 UI checks in headless Chrome
+uv run --with playwright python scripts/browser_check.py # 76 UI checks in headless Chrome
 uv run --with playwright python scripts/perf_check.py    # render/stream budgets
 ```
 
@@ -187,7 +187,7 @@ provider keys to survive a restore.
 ## Status
 
 See `docs/parity.md` for the feature parity table. Verified by 97 pytest
-endpoint tests, the SSE demo, a 72-check automated browser pass, and
+endpoint tests, the SSE demo, a 76-check automated browser pass, and
 `scripts/perf_check.py` render/stream budgets
 (`scripts/browser_check.py`). Still recommended before real use: one manual
 look on a phone (responsive layout is CSS-only) and a live-provider smoke

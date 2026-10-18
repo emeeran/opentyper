@@ -1,6 +1,6 @@
 [project]
 name = "opentyper"
-version = "0.3.1"
+version = "0.3.2"
 description = "Self-hosted bring-your-own-API-key chat UI for LLMs"
 requires-python = ">=3.12"
 dependencies = [
