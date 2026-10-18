@@ -1,0 +1,42 @@
+# OpenTyper nginx reverse proxy example (SSE-safe).
+#
+# 1. cp to /etc/nginx/sites-available/opentyper && ln -s into sites-enabled
+# 2. nginx -t && systemctl reload nginx
+#
+# TLS: terminate at nginx. Get certificates via:
+#   sudo apt install certbot python3-certbot-nginx
+#   sudo certbot --nginx -d chat.example.com
+# (certbot rewrites this file to add the 443 server block + redirect.)
+#
+# The app itself binds 127.0.0.1:8000 — never expose it directly.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name chat.example.com;
+
+    # certbot will add the 80->443 redirect automatically; until then:
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+
+        # --- SSE essentials ---
+        proxy_set_header Connection "";
+        proxy_buffering off;          # do not buffer streamed deltas
+        proxy_cache off;
+        chunked_transfer_encoding on;
+
+        # long streams: don't time out mid-reply (app timeout is 300s)
+        proxy_read_timeout 360s;
+        proxy_send_timeout 360s;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# After running certbot, a 443 block is appended; it should keep the same
+# location / block above (certbot preserves location config).
