@@ -32,9 +32,19 @@ opentyper/
 │                   Chrome) · perf_check.py (render/stream budgets) · live_smoke.py
 │                   (real-provider smoke)
 ├── deploy/         install.sh, build_deb.sh, nginx.conf.example, backup.sh
-└── docs/           recon + recon-premium, assumptions, spec, parity,
-                     improve_plan (executed), TODO (checklist)
+└── docs/           user-guide (manual) · api (reference) · spec, parity,
+                     assumptions, recon + recon-premium, improve_plan
+                     (executed), TODO (checklist)
 ```
+
+## Documentation
+
+- **[User guide](docs/user-guide.md)** — every feature, task by task (chatting,
+  organizing, artifacts, memory, sharing, settings, shortcuts, troubleshooting)
+- **[API reference](docs/api.md)** — all endpoints, SSE contract, settings keys,
+  limits, env vars, security model
+- [Feature parity](docs/parity.md) — OpenTyper vs TypingMind, row by row
+- [Spec](docs/spec.md) — schema, design decisions, security model
 
 ## Requirements
 
